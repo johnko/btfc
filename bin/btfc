@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-181021
+SCRIPTVERSION=141204-181352
 
 ######################################################################
 # Variables
@@ -487,7 +487,6 @@ fetch_with() {
     fetch \
       --ipv4-only \
       --no-redirect \
-      --retry \
       --ca-cert=/usr/local/etc/nginx/ssl/ssl.crt \
       --direct \
       --mirror \
