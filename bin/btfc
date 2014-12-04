@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-180156
+SCRIPTVERSION=141204-181021
 
 ######################################################################
 # Variables
@@ -259,6 +259,10 @@ install_nginx() {
     pkg install -f -y nginx
 }
 
+link_metafile() {
+  ln -sf .. "${prefix_meta}/metafile"
+}
+
 configure_nginx() {
   cat >"${NGINXCONF}" <<EOF
 # nginx config file
@@ -308,6 +312,7 @@ server {
 }
 EOF
   chmod 644 "${sitesdir}/ssl-opentracker"
+  link_metafile
 }
 
 generate_ssl() {
