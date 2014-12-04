@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-075801
+SCRIPTVERSION=141204-080935
 
 ######################################################################
 # Variables
@@ -448,24 +448,27 @@ create_torrent_meta() {
 
 meta2bkp_torrent_meta() {
   [ -d "${prefix_meta}/bkp" ] || install -d -m 700 "${prefix_meta}/bkp"
-  rsync -qt \
-    "${prefix_meta}/${1}.torrent" \
-    "${prefix_meta}/bkp/${1}.torrent.`date +%y%m%d-%H%M%S`"
+  [ -e "${prefix_meta}/${1}.torrent" ] && \
+    rsync -qt \
+      "${prefix_meta}/${1}.torrent" \
+      "${prefix_meta}/bkp/${1}.torrent.`date +%y%m%d-%H%M%S`"
 }
 
 tmp2meta_torrent_meta() {
-  [ -d "${prefix_meta}/bkp" ] || install -d -m 700 "${prefix_meta}/bkp"
-  rsync -qt \
-    "${prefix_tmp}/${1}.torrent" \
-    "${prefix_meta}/"
+  [ -d "${prefix_meta}" ] || install -d -m 700 "${prefix_meta}"
+  [ -e "${prefix_tmp}/${1}.torrent" ] && \
+    rsync -qt \
+      "${prefix_tmp}/${1}.torrent" \
+      "${prefix_meta}/"
 }
 
 meta2tmp_torrent_meta() {
   ########## copies it to prefix_tmp so we can do fetch timestamping
   [ -d "${prefix_tmp}" ] || install -d -m 700 "${prefix_tmp}"
-  rsync -qt \
-    "${prefix_meta}/${1}.torrent" \
-    "${prefix_tmp}/"
+  [ -e "${prefix_meta}/${1}.torrent" ] && \
+    rsync -qt \
+      "${prefix_meta}/${1}.torrent" \
+      "${prefix_tmp}/"
 }
 
 fetch_with() {
@@ -501,13 +504,20 @@ fetch_torrent_meta() {
     ########## fetch newest $1.torrent from peers to prefix_tmp/$1.torrent
     fetch_with fetch "$ip" "$1"
   done
-  ########## if different from prefix_meta/$1.torrent, run kill_bt_client $1
-  if ! diff -q "${prefix_meta}/${1}.torrent" "${prefix_tmp}/${1}.torrent" \
-    >/dev/null 2>&1 ; then
+  if [ -e "${prefix_meta}/${1}.torrent" -a -e "${prefix_tmp}/${1}.torrent" ]; \
+    then
+    ########## if different from prefix_meta/$1.torrent, run kill_bt_client $1
+    if ! diff -q "${prefix_meta}/${1}.torrent" "${prefix_tmp}/${1}.torrent" \
+      >/dev/null 2>&1 ; then
+      kill_bt_client "$1"
+      ########## rsync -t meta/$1.torrent to meta/bkp/$1.torr.`date +%y%m%d-%H%M%S`
+      meta2bkp_torrent_meta "$1"
+      ########## rsync -t prefix_tmp/$1.torrent to prefix_meta/$1.torrent
+      tmp2meta_torrent_meta "$1"
+      [ -e "${prefix_tmp}/${1}.torrent" ] && rm "${prefix_tmp}/${1}.torrent"
+    fi
+  elif [ -e "${prefix_tmp}/${1}.torrent" ]; then
     kill_bt_client "$1"
-    ########## rsync -t meta/$1.torrent to meta/bkp/$1.torr.`date +%y%m%d-%H%M%S`
-    meta2bkp_torrent_meta "$1"
-    ########## rsync -t prefix_tmp/$1.torrent to prefix_meta/$1.torrent
     tmp2meta_torrent_meta "$1"
     [ -e "${prefix_tmp}/${1}.torrent" ] && rm "${prefix_tmp}/${1}.torrent"
   fi
@@ -533,6 +543,23 @@ setup_leech_btfc() {
   pkg_check_install wget
   pkg_check_install rsync
   pkg_check_install transmission-cli
+}
+
+######################################################################
+# status related functions
+
+status_btfc() {
+  for i in ${prefix_meta}/*.torrent ; do
+    transmission-show -s "$i" | \
+      egrep -o '(Name.*|\.\.\..*)' | \
+      awk '{$1=""; print}' | tr '\n' ' '
+    SIZE=`transmission-show "$i" | egrep '(Total Size:)' | \
+      awk -F: '{print $2}' | tr '\n' ' '`
+    HASH=`transmission-show "$i" | egrep '(Hash:)' | \
+      awk -F: '{print $2}' | tr '\n' ' '`
+    echo -n " $SIZE $HASH $i"
+    echo
+  done | grep -v 'no match' | column -t
 }
 
 ######################################################################
@@ -623,3 +650,4 @@ read_config
 [ "$LEECH" = "1" ] && batch_job leech "$sync_name"
 [ "$KILL" = "1" ]  && batch_job kill  "$sync_name"
 [ "$SEED" = "1" ] &&  batch_job seed  "$sync_name"  "$original_path"
+[ "$LEECH" != "1" -a "$KILL" != "1" -a "$SEED" != "1" ] && status_btfc
