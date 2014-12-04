@@ -34,16 +34,127 @@
 SCRIPTVERSION=141204-002158
 
 ######################################################################
+# Variables
+######################################################################
+
+OPENTRACKERPKG="opentracker-0.2010.05.30_1.txz"
+
+NGINXCONF=/usr/local/etc/nginx/nginx.conf
+OPENTRACKERCONF=/usr/local/etc/opentracker/opentracker.conf
+
+######################################################################
 # Functions
+######################################################################
+
+usage() {
+  cat <<EOF
+usage:  ${0##*/} [-c btfc.conf] [-l|-k|-s] [-n name] [-p /path]
+
+        -c btfc.conf Config file.
+
+        -l -n name   Starts leeching name.
+        -l           Leech all.
+
+        -k -n name   Kill. Stops leeching name.
+        -k           Kill all.
+
+        -s -n name   Seed name.
+        -s           Seed all.
+        -s -n name -p /path  Seed name, first copying /path to prefix_data/name
+EOF
+}
+
+exiterror() {
+  echo "EXITCODE: $1" >&2
+  exit $1
+}
 
 read_config() {
-  ########## if -c file.conf, source
-  ########## elif ${0%/*}/../etc/btfc/btfc.conf
-  ########## elif /usr/local/etc/btfc/btfc.conf
-  ########## elif /etc/btfc/btfc.conf
+  ########## if not set, set config_file
+  if [ -z "$config_file" ]; then
+    if [ -e "${0%/*}/../etc/btfc/btfc.conf" ]; then
+      config_file="${0%/*}/../etc/btfc/btfc.conf"
+    elif [ -e "/usr/local/etc/btfc/btfc.conf" ]; then
+      config_file="/usr/local/etc/btfc/btfc.conf"
+    elif [ -e "/etc/btfc/btfc.conf" ]; then
+      config_file="/etc/btfc/btfc.conf"
+    fi
+  fi
+  ########## if exist config_file
+  if [ -e "$config_file" ]; then
+    echo -n "Sourcing $config_file ..." >&2
+    if ! source $config_file ; then
+      echo "ERROR: can't source $config_file." >&2
+      exiterror 1
+    fi
+    echo " done" >&2
+  else
+    echo "ERROR: /usr/local/etc/btfc/btfc.conf was not found." >&2
+  fi
   ########## if not set, set prefix_meta as /tmp/btfcmeta
+  [ -z "$prefix_meta" ] && prefix_meta="/tmp/btfcmeta"
+  [ -d "$prefix_meta" ] || install -d -m 700 "$prefix_meta"
+  if [ ! -d "$prefix_meta" ]; then
+    echo "ERROR: $prefix_meta is not a valid folder."
+    exiterror 1
+  fi
   ########## if not set, set prefix_data as /tmp/btfcdata
+  [ -z "$prefix_data" ] && prefix_data="/tmp/btfcdata"
+  [ -d "$prefix_data" ] || install -d -m 700 "$prefix_data"
+  if [ ! -d "$prefix_data" ]; then
+    echo "ERROR: $prefix_data is not a valid folder."
+    exiterror 1
+  fi
+  ########## if not set, set opentracker_listen as 127.0.0.1:6969
+  [ -z "$opentracker_listen" ] && opentracker_listen="127.0.0.1:6969"
+  ########## if not set, set opentracker_listen as *:7878
+  [ -z "$nginx_listen" ] && nginx_listen="*:7878"
   ########## if not set peerlist, exit 1
+  if [ -z "$peerlist" ]; then
+    echo "ERROR: peerlist is not set in $config_file." >&2
+    exiterror 1
+  fi
+  if [ ! -r "$peerlist" ]; then
+    echo "ERROR: can't read from $peerlist."
+    exiterror 1
+  fi
+  ########## if not set synclist, exit 1
+  if [ -z "$synclist" ]; then
+    echo "ERROR: synclist is not set in $config_file." >&2
+    exiterror 1
+  fi
+  if [ ! -r "$synclist" ]; then
+    echo "ERROR: can't read from $peerlist."
+    exiterror 1
+  fi
+}
+
+parse_ip() {
+  ########## split ip:port, return ip
+  echo "$1" | awk -F: '{print $1}' | tr -d ' '
+}
+
+parse_port() {
+  ########## split ip:port, return port
+  echo "$1" | awk -F: '{print $2}' | tr -d ' '
+}
+
+get_nginx_port() {
+  parse_port "$nginx_listen"
+}
+
+pkg_check_install() {
+  if [ ! -x /usr/sbin/p ]; then
+    if [ ! -x /usr/local/sbin/pkg-static ]; then
+      pkg bootstrap -f
+      pbin=pkg-static
+    else
+      pbin=pkg-static
+    fi
+  else
+    pbin=p
+  fi
+  $pbin info "$1" >/dev/null || $pbin install -f -y "$1"
 }
 
 ######################################################################
@@ -51,118 +162,466 @@ read_config() {
 
 add_ip_to_pf_table() {
   ########## if regex match ip, use pf-table add btfc ip
+  if echo "$1" | egrep -o "([0-9]{1,3}\.){3}[0-9]{1,3}" >/dev/null 2>&1 ; then
+    peerip=`echo "$1" | egrep -o "([0-9]{1,3}\.){3}[0-9]{1,3}"`
+    pfctl -P -t btfc -T add $peerip 2>/dev/null || \
+      echo "ERROR: can't pfctl -P -t btfc -T add $peerip." >&2
+  fi
 }
+
 configure_firewall() {
   ########## for ip in peerlist, add_ip_to_pf_table ip
+  cat "$peerlist" | while read ip comment ; do
+    case "$ip" in "#"*|"") continue; esac
+    add_ip_to_pf_table "$ip"
+  done
 }
 
 ######################################################################
 # OpenTracker related functions
 
 build_opentracker() {
+  pkg_check_install libowfat
   ########## if package not found or [ "$1" = "-f" ]
+  if [ ! -e "/var/tmp/${OPENTRACKERPKG}" ] || [ "$1" = "-f" ]; then
+    if [ ! -e "/usr/ports/net/opentracker/work/pkg/${OPENTRACKERPKG}" ] || \
+      [ "$1" = "-f" ]; then
+      [ -e "${OPENTRACKERCONF}" ] && rm "${OPENTRACKERCONF}"
+      while [ ! -e /usr/ports/net ]; do
+        portsnap fetch && portsnap extract
+      done
+      install -d -m 755 /var/db/ports/net_opentracker
+      cat >/var/db/ports/net_opentracker/options <<EOF
+_OPTIONS_READ=opentracker-0.2010.05.30_1
+_FILE_COMPLETE_OPTIONS_LIST=COMPRESSION_GZIP DEBUG_HTTPERROR FULLSCRAPE IPV6 \
+RESTRICT_STATS ACCESSLIST_OPEN ACCESSLIST_BLACK ACCESSLIST_WHITE
+OPTIONS_FILE_UNSET+=COMPRESSION_GZIP
+OPTIONS_FILE_UNSET+=DEBUG_HTTPERROR
+OPTIONS_FILE_SET+=FULLSCRAPE
+OPTIONS_FILE_UNSET+=IPV6
+OPTIONS_FILE_SET+=RESTRICT_STATS
+OPTIONS_FILE_UNSET+=ACCESSLIST_OPEN
+OPTIONS_FILE_UNSET+=ACCESSLIST_BLACK
+OPTIONS_FILE_SET+=ACCESSLIST_WHITE
+EOF
+      if ! BATCH=YES make -C /usr/ports/net/opentracker ; then
+        echo "ERROR: occured during make -C /usr/ports/net/opentracker" >&2
+        exiterror 1
+      fi
+      BATCH=YES make -C /usr/ports/net/opentracker package deinstall
+    fi
+    if ! cp "/usr/ports/net/opentracker/work/pkg/${OPENTRACKERPKG}" \
+      "/var/tmp/${OPENTRACKERPKG}" ; then
+      echo "ERROR: failed copy to /var/tmp/${OPENTRACKERPKG}" >&2
+      exiterror 1
+    fi
+    chmod 644 "/var/tmp/${OPENTRACKERPKG}"
+    BATCH=YES make -C /usr/ports/net/opentracker clean
+  fi
 }
+
+test_opentracker() {
+  service opentracker onestatus >/dev/null 2>&1
+  return $?
+}
+
 install_opentracker() {
-  ########## run test_opentracker && exit || install
+  ########## run test_opentracker || install
+  test_opentracker || \
+    pkg add -f "/var/tmp/${OPENTRACKERPKG}"
 }
-configure_opentracker() {}
-test_opentracker() {}
+
+configure_opentracker() {
+  cat >"${OPENTRACKERCONF}" <<EOF
+# opentracker config file
+listen.tcp ${opentracker_listen}
+access.whitelist allowedhashes
+# access.stats \$WHITELIST_IP
+# access.stats_path stats
+# livesync.cluster.listen \${MY_IP}:9696
+# livesync.cluster.node_ip \${PEER_1_IP}
+# livesync.cluster.node_ip \${PEER_2_IP}
+tracker.rootdir /usr/local/etc/opentracker
+tracker.user nobody
+EOF
+  chmod 644 "${OPENTRACKERCONF}"
+}
 
 ######################################################################
 # NGINX related functions
 
-install_nginx() {
-  ########## run test_nginx && exit || install
+text_nginx() {
+  service nginx onestatus >/dev/null 2>&1
+  return $?
 }
-configure_nginx() {}
-text_nginx() {}
-generate_ssl() {}
+
+install_nginx() {
+  ########## run test_nginx || install
+  text_nginx || \
+    pkg install -f -y nginx
+}
+
+configure_nginx() {
+  cat >"${NGINXCONF}" <<EOF
+# nginx config file
+user nobody;
+worker_processes 1;
+events {
+  worker_connections 1024;
+}
+http {
+  include mime.types;
+  default_type application/octet-stream;
+  sendfile on;
+  keepalive_timeout 65;
+  include /usr/local/etc/nginx/conf.d/*.conf;
+  include /usr/local/etc/nginx/sites-enabled/*;
+}
+EOF
+  chmod 644 "${NGINXCONF}"
+  #
+  sitesavail="${NGINXCONF%/*}/sites-available"
+  install -d -m 755 "${sitesavail}"
+  chmod 755 "${sitesavail}"
+  #
+  sitesdir="${NGINXCONF%/*}/sites-enabled"
+  install -d -m 755 "${sitesdir}"
+  chmod 755 "${sitesdir}"
+  cat >"${sitesdir}/ssl-opentracker" <<EOF
+upstream opentracker {
+  server ${opentracker_listen};
+}
+server {
+  listen ${nginx_listen} ssl;
+  server_name your.tracker.local;
+  ssl_certificate ssl/ssl.crt;
+  ssl_certificate_key ssl/ssl.key;
+  ssl_ciphers HIGH:!aNULL:!MD5;
+  ssl_prefer_server_ciphers on;
+  location / {
+    # DOESN'T WORK: OpenTracker has problems determining peer IP if proxied.
+    # proxy_set_header Host \$host;
+    # proxy_set_header X-Real-IP \$remote_addr;
+    proxy_pass http://opentracker/;
+  }
+  location ~ ^/metafile/ {
+    root ${prefix_meta};
+  }
+}
+EOF
+  chmod 644 "${sitesdir}/ssl-opentracker"
+}
+
+generate_ssl() {
+  ssldir="${NGINXCONF%/*}/ssl"
+  umask 077
+  if [ ! -e "${ssldir}/ssl.key" ]; then
+    openssl genrsa -out "${ssldir}/ssl.key" 4096
+    chmod 600 "${ssldir}/ssl.key"
+  fi
+  if [ ! -e "${ssldir}/ssl.csr" ]; then
+    yes '' | openssl req -new -key "${ssldir}/ssl.key" \
+      -out "${ssldir}/ssl.csr"
+      chmod 600 "${ssldir}/ssl.csr"
+  fi
+  umask 022
+  if [ ! -e "${ssldir}/ssl.crt" ]; then
+    openssl x509 -req -days 600 -in "${ssldir}/ssl.csr" \
+      -signkey "${ssldir}/ssl.key" -out "${ssldir}/ssl.crt"
+      chmod 644 "${ssldir}/ssl.crt"
+  fi
+}
 
 ######################################################################
 # BitTorrent / Transmission related functions
 
+########## modified from \
+# http://edwardslab.bmcb.georgetown.edu/software/bittorrent_for_clusters.html
 kill_bt_client() {
   ########## kill /var/run/btfc/$1.pid
+  if [ -f "${prefix_meta}/${1}.pid" ]; then
+    if valid_process "${prefix_meta}/${1}.pid" ; then
+      kill `cat ${prefix_meta}/${1}.pid` >/dev/null 2>&1
+      sleep 1
+      if valid_process "${prefix_meta}/${1}.pid" ; then
+        kill -9 `cat ${prefix_meta}/${1}.pid` >/dev/null 2>&1
+      fi
+    fi
+    rm "${prefix_meta}/${1}.pid"
+    [ -e "${prefix_meta}/${1}.cksum" ] && rm "${prefix_meta}/${1}.cksum"
+  fi
 }
 
 start_bt_client() {
-  ########## find unused port number
+  ########## TODO find unused port number
   ########## launch transmission-cli $1, prefix_meta/$1{.pid,.log}
+  transmission-cli -M -er -v -w "${prefix_data}" "${prefix_meta}/${1}.torrent" \
+    >"${prefix_meta}/${1}.log" 2>&1 &
+  echo $! >"${prefix_meta}/${1}.pid"
+  sleep 1
+}
+
+stop_and_run_script() {
+  if [ -n "${dlcomplete_script}" ]; then
+    if [ -e "${prefix_data}/${1}/${dlcomplete_script}" ]; then
+      sh "${prefix_data}/${1}/${dlcomplete_script}"
+    fi
+  fi
+  ########## delay continue_seeding_for
+  if [ -n "$continue_seeding_for" ]; then
+    echo "Waiting $continue_seeding_for seconds to help other peers"
+    sleep $continue_seeding_for
+  fi
+  kill_bt_client "${1}"
+  sleep 1
+}
+
+########## modified from \
+# http://edwardslab.bmcb.georgetown.edu/software/bittorrent_for_clusters.html
+valid_process() {
+  if [ -f "$1" ]; then
+    ps `cat $1` >/dev/null 2>&1
+    return $?
+  else
+    return 1
+  fi
 }
 
 ######################################################################
 # Torrent meta related functions
 
 create_torrent_meta() {
-  ########## run kill_bt_client ${1##*/}
-  ########## create a new ${1##*/}.torrent from path $1
+  kill_bt_client "${1}"
+  if [ -n "$2" ]; then
+    if [ -f "$2" ] ; then
+      ########## if file
+      rsync  -lptgoDq "${2}" "${prefix_data}/${1}"
+    elif [ -d "$2" ]; then
+      ########## if directory
+      rsync -rlptgoDq "${2}/" "${prefix_data}/${1}/"
+    fi
+  fi
   ########## Tracker is $tracker or dynamic
+  if [ -n "${tracker}" ]; then
+    TRACKERURL="-t https://${tracker}/announce"
+  else
+    for i in `ifconfig | egrep -o "([0-9]{1,3}\.){3}[0-9]{1,3}" | \
+      grep -v 127.0.0.1` ; do
+      TRACKERURL="-t https://${i}:7878/announce"
+    done
+  fi
+  ########## create a new ${1}.torrent from path $1
+  ########## modified from \
+  # http://edwardslab.bmcb.georgetown.edu/software/bittorrent_for_clusters.html
+  if [ -f "${prefix_data}/${1}" ] ; then
+    CKSUM=`cksum ${prefix_data}/${1}`
+    OLDCKSUM=""
+    if [ -f "${prefix_meta}/${1}.cksum" ]; then
+      OLDCKSUM=`cat ${prefix_meta}/${1}.cksum`
+    fi
+    if [ "$CKSUM" != "$OLDCKSUM" ]; then
+      transmission-create -p $TRACKERURL \
+        -o "${prefix_meta}/${1}.torrent" "${prefix_data}/${1}"
+      chmod 644 "${prefix_meta}/${1}.torrent"
+      HASH=`transmission-show ${prefix_meta}/${1}.torrent | grep 'Hash: ' | awk '{print $2}'`
+      echo "$HASH" >>"${OPENTRACKERCONF%/*}/allowedhashes"
+      # SIGHUP opentracker to refresh allowedhashes
+      service opentracker onestatus >/dev/null || service opentracker onestart
+      [ -f /var/run/opentracker.pid ] && kill -1 `cat /var/run/opentracker.pid`
+      echo "$CKSUM" >"${prefix_meta}/${1}.cksum"
+      echo "Made torrent file for file $1 ..." >&2
+    else
+      echo "File $1 torrent already made and file hasn't changed" >&2
+    fi
+  elif [ -d "${prefix_data}/${1}" ] ; then
+    transmission-create -p $TRACKERURL \
+      -o "${prefix_meta}/${1}.torrent" "${prefix_data}/${1}"
+    chmod 644 "${prefix_meta}/${1}.torrent"
+    HASH=`transmission-show ${prefix_meta}/${1}.torrent | grep 'Hash: ' | awk '{print $2}'`
+    echo "$HASH" >>"${OPENTRACKERCONF%/*}/allowedhashes"
+    # SIGHUP opentracker to refresh allowedhashes
+    service opentracker onestatus >/dev/null || service opentracker onestart
+    test -f /var/run/opentracker.pid && kill -1 `cat /var/run/opentracker.pid`
+    echo "Made torrent file for directory $1 ..." >&2
+  else
+    echo "ERROR: No such file or directory $1" >&2
+  fi
+}
+
+meta2bkp_torrent_meta() {
+  [ -d "${prefix_meta}/bkp" ] || install -d -m 700 "${prefix_meta}/bkp"
+  rsync -qt \
+    "${prefix_meta}/${1}.torrent" \
+    "${prefix_meta}/bkp/${1}.torrent.`date +%y%m%d-%H%M%S`"
+}
+
+tmp2meta_torrent_meta() {
+  [ -d "${prefix_meta}/bkp" ] || install -d -m 700 "${prefix_meta}/bkp"
+  rsync -qt \
+    "${prefix_tmp}/${1}.torrent" \
+    "${prefix_meta}/"
+}
+
+meta2tmp_torrent_meta() {
+  ########## copies it to prefix_tmp so we can do fetch timestamping
+  [ -d "${prefix_tmp}" ] || install -d -m 700 "${prefix_tmp}"
+  rsync -qt \
+    "${prefix_meta}/${1}.torrent" \
+    "${prefix_tmp}/"
+}
+
+fetch_with() {
+  ########## $1 can be fetch or wget
+  ########## $2 is peer
+  ########## $3 is sync_name
+  if [ "$1" = "fetch" ]; then
+    ########## FreeBSD specific
+    fetch \
+      --ipv4-only \
+      --no-redirect \
+      --retry \
+      --ca-cert=/usr/local/etc/nginx/ssl/ssl.crt \
+      --direct \
+      --mirror \
+      --no-verify-hostname \
+      --output="${prefix_tmp}/${3}.torrent" \
+      --quiet \
+      --timeout=10 \
+      "https://${2}/metafile/${3}.torrent"
+  elif [ "$1" = "wget" ]; then
+    ########## TODO maybe more portable to Linux
+    wget
+  fi
 }
 
 fetch_torrent_meta() {
-  ########## fetch newest $1.torrent from peers to prefix_tmp/$1.torrent
+  ########## copies it to prefix_tmp so we can do fetch timestamping
+  meta2tmp_torrent_meta "$1"
+  ########## for each peer
+  cat "$peerlist" | while read ip comment ; do
+  case "$ip" in "#"*|"") continue; esac
+    ########## fetch newest $1.torrent from peers to prefix_tmp/$1.torrent
+    fetch_with fetch "$ip" "$1"
+  done
   ########## if different from prefix_meta/$1.torrent, run kill_bt_client $1
-  ########## rsync -t meta/$1.torrent to meta/bkp/$1.torr.`date +%y%m%d-%H%M%S`
-  ########## rsync -t prefix_tmp/$1.torrent to prefix_meta/$1.torrent
-  ########## rm prefix_tmp/$1.torrent
+  if ! diff -q "${prefix_meta}/${1}.torrent" "${prefix_tmp}/${1}.torrent" \
+    >/dev/null 2>&1 ; then
+    kill_bt_client "$1"
+    ########## rsync -t meta/$1.torrent to meta/bkp/$1.torr.`date +%y%m%d-%H%M%S`
+    meta2bkp_torrent_meta "$1"
+    ########## rsync -t prefix_tmp/$1.torrent to prefix_meta/$1.torrent
+    tmp2meta_torrent_meta "$1"
+    [ -e "${prefix_tmp}/${1}.torrent" ] && rm "${prefix_tmp}/${1}.torrent"
+  fi
 }
 
 ######################################################################
 # setup related functions
 
-setup() {
-  ########## run ntpdate || exit 1
-  ########## run configure_firewall
-  ########## run build_opentracker
-  ########## run install_opentracker
-  ########## run configure_opentracker
-  ########## run test_opentracker || exit 1
-  ########## run install_nginx
-  ########## run configure_nginx (to include sites-enabled)
-  ########## run generate_ssl
-  ########## run test_nginx || exit 1
+setup_seed_btfc() {
+  build_opentracker
+  install_opentracker
+  configure_opentracker
+  service opentracker onestart >/dev/null 2>&1
+  install_nginx
+  configure_nginx
+  generate_ssl
+  service nginx onestart >/dev/null 2>&1
+}
+
+setup_leech_btfc() {
+  service ntpdate start || exiterror $?
+  configure_firewall
+  pkg_check_install wget
+  pkg_check_install rsync
+  pkg_check_install transmission-cli
 }
 
 ######################################################################
 # seeder related functions
 
-seed() {
-  ########## run create_torrent_meta $1
-  ########## run start_bt_client ${1##*/}.torrent
+seed_btfc() {
+  create_torrent_meta "$1"  "$2"
+  start_bt_client     "$1"
 }
 
 ######################################################################
 # leecher related functions
 
-leech() {
-  ########## run fetch_torrent_meta $1
-  ########## run start_bt_client ${1##*/}.torrent
-  ########## on complete, run dlcomplete_script_prefix+dlcomplete_script_suffix
-  ########## delay continue_seeding_for
-  ########## run kill_bt_client
+leech_btfc() {
+  fetch_torrent_meta "$1"
+  start_bt_client    "$1"
+  while valid_process "${prefix_meta}/${1}.pid" ; do
+    ########## Look for "Complete" or "Seeding" in log
+    if cat "${prefix_meta}/${1}.log" | grep ' Complete' >/dev/null  ; then
+      stop_and_run_script "${1}"
+    elif cat "${prefix_meta}/${1}.log" | grep 'Seeding,' >/dev/null ; then
+      stop_and_run_script "${1}"
+    fi
+  done &
 }
 
 ######################################################################
 # batch related functions
 
-batch_run() {
-  ########## this will be called from crontab
-  ########## for i in synclist, do leech $i
+batch_job() {
+  ########## $1 can be seed, leech, kill
+  ########## $2 is sync_name if passed
+  ########## $3 is original_path if passed
+  if [ -n "$2" ]; then
+    [ "$1" = "seed" ] &&  seed_btfc      "$2"  "$3"
+    [ "$1" = "leech" ] && leech_btfc     "$2"
+    [ "$1" = "kill" ] &&  kill_bt_client "$2"
+  else
+    ########## for i in synclist, do seed_btfc $i
+    cat "$synclist" | while read name comment ; do
+    case "$name" in "#"*|"") continue; esac
+      [ "$1" = "seed" ] &&  seed_btfc      "$name"
+      [ "$1" = "leech" ] && leech_btfc     "$name"
+      [ "$1" = "kill" ] &&  kill_bt_client "$name"
+    done
+  fi
 }
 
 ######################################################################
 # Main
 ######################################################################
 
+while getopts c:n:p:lksvh o; do
+  case "$o" in
+    c) config_file="$OPTARG" ;;
+    n) sync_name="${OPTARG}" ;;
+    p) original_path="${OPTARG}" ;;
+    l) LEECH=1 ;;
+    k) KILL=1 ;;
+    s) SEED=1 ;;
+    v) echo "$SCRIPTVERSION" ; exiterror 1 ;;
+    h) usage ; exiterror 1 ;;
+    [?]) usage ; exiterror 1 ;;
+  esac
+done
+
+if [ "$LEECH" = "1" -a "$KILL" = "1" ]; then
+  echo "ERROR: only -l or -k, not both." >&2
+  exiterror 1
+elif [ "$KILL" = "1" -a "$SEED" = "1" ]; then
+  echo "ERROR: only -k or -s, not both." >&2
+  exiterror 1
+elif [ "$SEED" = "1" -a "$LEECH" = "1" ]; then
+  echo "ERROR: only -s or -l, not both." >&2
+  exiterror 1
+fi
+
+if [ -n "$original_path" ] && [ -z "$sync_name" ]; then
+  echo "ERROR: -n is needed with -p." >&2
+  exiterror 1
+fi
+
 read_config
-setup
 
-########## parse options
-########## -c btfc.conf Batch run.
-########## -K           Kill all.
-########## -l -n name   Starts leeching name.
-########## -k -n name   Kill. Stops leeching name.
-########## -s -n name   Seed name.
+[ "$KILL" = "1" ] || setup_leech_btfc
+[ "$SEED" = "1" ] && setup_seed_btfc
 
-
-batch_run
+[ "$LEECH" = "1" ] && batch_job leech "$sync_name"
+[ "$KILL" = "1" ]  && batch_job kill  "$sync_name"
+[ "$SEED" = "1" ] &&  batch_job seed  "$sync_name"  "$original_path"
