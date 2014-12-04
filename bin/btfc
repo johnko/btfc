@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-174913
+SCRIPTVERSION=141204-175618
 
 ######################################################################
 # Variables
@@ -354,9 +354,11 @@ kill_bt_client() {
 start_bt_client() {
   ########## TODO find unused port number
   ########## launch transmission-cli $1, prefix_meta/$1{.pid,.log}
+  umask 077
   transmission-cli -M -er -v -w "${prefix_data}" "${prefix_meta}/${1}.torrent" \
     >"${prefix_meta}/${1}.log" 2>&1 &
   echo $! >"${prefix_meta}/${1}.pid"
+  umask 022
   sleep 1
 }
 
@@ -446,6 +448,7 @@ create_torrent_meta() {
 }
 
 meta2bkp_torrent_meta() {
+  [ -d "${prefix_meta}" ] || install -d -m 755 "${prefix_meta}"
   [ -d "${prefix_meta}/bkp" ] || install -d -m 700 "${prefix_meta}/bkp"
   [ -e "${prefix_meta}/${1}.torrent" ] && \
     rsync -qt \
@@ -454,7 +457,7 @@ meta2bkp_torrent_meta() {
 }
 
 tmp2meta_torrent_meta() {
-  [ -d "${prefix_meta}" ] || install -d -m 700 "${prefix_meta}"
+  [ -d "${prefix_meta}" ] || install -d -m 755 "${prefix_meta}"
   [ -e "${prefix_tmp}/${1}.torrent" ] && \
     rsync -qt \
       "${prefix_tmp}/${1}.torrent" \
