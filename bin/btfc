@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-172523
+SCRIPTVERSION=141204-172949
 
 ######################################################################
 # Variables
@@ -550,15 +550,17 @@ status_btfc() {
     #for i in ${prefix_meta}/*.torrent ; do
     for i in `pgrep -lf transmission-cli | grep '\-M \-er \-v' | \
         awk '{print $NF}'` ; do
-      transmission-show -s "$i" | \
+      STATS=`transmission-show -s "$i" | \
         egrep -o '(Name.*|\.\.\..*)' | \
-        awk '{$1=""; print}' | tr '\n' ' '
+        awk '{$1=""; print}' | tr '\n' ' '`
+      if echo "$STATS" | grep error >/dev/null 2>&1 ; then
+        STATS="tracker error"
+      fi
       SIZE=`transmission-show "$i" | egrep '(Total Size:)' | \
         awk -F: '{print $2}' | tr '\n' ' '`
       HASH=`transmission-show "$i" | egrep '(Hash:)' | \
         awk -F: '{print $2}' | tr '\n' ' '`
-      echo -n " $SIZE $HASH $i"
-      echo
+      echo "$STATS $SIZE $HASH $i"
     done | grep -v 'no match' | column -t
   fi
 }
