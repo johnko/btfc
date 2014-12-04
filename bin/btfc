@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-002158
+SCRIPTVERSION=141204-075801
 
 ######################################################################
 # Variables
@@ -394,10 +394,8 @@ create_torrent_meta() {
   kill_bt_client "${1}"
   if [ -n "$2" ]; then
     if [ -f "$2" ] ; then
-      ########## if file
       rsync  -lptgoDq "${2}" "${prefix_data}/${1}"
     elif [ -d "$2" ]; then
-      ########## if directory
       rsync -rlptgoDq "${2}/" "${prefix_data}/${1}/"
     fi
   fi
@@ -429,9 +427,9 @@ create_torrent_meta() {
       service opentracker onestatus >/dev/null || service opentracker onestart
       [ -f /var/run/opentracker.pid ] && kill -1 `cat /var/run/opentracker.pid`
       echo "$CKSUM" >"${prefix_meta}/${1}.cksum"
-      echo "Made torrent file for file $1 ..." >&2
+      echo "Made torrent file for file $1." >&2
     else
-      echo "File $1 torrent already made and file hasn't changed" >&2
+      echo "File $1 torrent already made and file hasn't changed." >&2
     fi
   elif [ -d "${prefix_data}/${1}" ] ; then
     transmission-create -p $TRACKERURL \
@@ -442,9 +440,9 @@ create_torrent_meta() {
     # SIGHUP opentracker to refresh allowedhashes
     service opentracker onestatus >/dev/null || service opentracker onestart
     test -f /var/run/opentracker.pid && kill -1 `cat /var/run/opentracker.pid`
-    echo "Made torrent file for directory $1 ..." >&2
+    echo "Made torrent file for directory $1." >&2
   else
-    echo "ERROR: No such file or directory $1" >&2
+    echo "ERROR: No such file or directory $1." >&2
   fi
 }
 
