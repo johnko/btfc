@@ -1,0 +1,168 @@
+#!/bin/sh
+######################################################################
+# LICENSE pulled in with, cat LICENSE  | awk '{print "# "$0}'
+######################################################################
+
+# Copyright (c) 2014, John Ko
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+######################################################################
+# Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
+######################################################################
+SCRIPTVERSION=141204-002158
+
+######################################################################
+# Functions
+
+read_config() {
+  ########## if -c file.conf, source
+  ########## elif ${0%/*}/../etc/btfc/btfc.conf
+  ########## elif /usr/local/etc/btfc/btfc.conf
+  ########## elif /etc/btfc/btfc.conf
+  ########## if not set, set prefix_meta as /tmp/btfcmeta
+  ########## if not set, set prefix_data as /tmp/btfcdata
+  ########## if not set peerlist, exit 1
+}
+
+######################################################################
+# Firewall related Functions
+
+add_ip_to_pf_table() {
+  ########## if regex match ip, use pf-table add btfc ip
+}
+configure_firewall() {
+  ########## for ip in peerlist, add_ip_to_pf_table ip
+}
+
+######################################################################
+# OpenTracker related functions
+
+build_opentracker() {
+  ########## if package not found or [ "$1" = "-f" ]
+}
+install_opentracker() {
+  ########## run test_opentracker && exit || install
+}
+configure_opentracker() {}
+test_opentracker() {}
+
+######################################################################
+# NGINX related functions
+
+install_nginx() {
+  ########## run test_nginx && exit || install
+}
+configure_nginx() {}
+text_nginx() {}
+generate_ssl() {}
+
+######################################################################
+# BitTorrent / Transmission related functions
+
+kill_bt_client() {
+  ########## kill /var/run/btfc/$1.pid
+}
+
+start_bt_client() {
+  ########## find unused port number
+  ########## launch transmission-cli $1, prefix_meta/$1{.pid,.log}
+}
+
+######################################################################
+# Torrent meta related functions
+
+create_torrent_meta() {
+  ########## run kill_bt_client ${1##*/}
+  ########## create a new ${1##*/}.torrent from path $1
+  ########## Tracker is $tracker or dynamic
+}
+
+fetch_torrent_meta() {
+  ########## fetch newest $1.torrent from peers to prefix_tmp/$1.torrent
+  ########## if different from prefix_meta/$1.torrent, run kill_bt_client $1
+  ########## rsync -t meta/$1.torrent to meta/bkp/$1.torr.`date +%y%m%d-%H%M%S`
+  ########## rsync -t prefix_tmp/$1.torrent to prefix_meta/$1.torrent
+  ########## rm prefix_tmp/$1.torrent
+}
+
+######################################################################
+# setup related functions
+
+setup() {
+  ########## run ntpdate || exit 1
+  ########## run configure_firewall
+  ########## run build_opentracker
+  ########## run install_opentracker
+  ########## run configure_opentracker
+  ########## run test_opentracker || exit 1
+  ########## run install_nginx
+  ########## run configure_nginx (to include sites-enabled)
+  ########## run generate_ssl
+  ########## run test_nginx || exit 1
+}
+
+######################################################################
+# seeder related functions
+
+seed() {
+  ########## run create_torrent_meta $1
+  ########## run start_bt_client ${1##*/}.torrent
+}
+
+######################################################################
+# leecher related functions
+
+leech() {
+  ########## run fetch_torrent_meta $1
+  ########## run start_bt_client ${1##*/}.torrent
+  ########## on complete, run dlcomplete_script_prefix+dlcomplete_script_suffix
+  ########## delay continue_seeding_for
+  ########## run kill_bt_client
+}
+
+######################################################################
+# batch related functions
+
+batch_run() {
+  ########## this will be called from crontab
+  ########## for i in synclist, do leech $i
+}
+
+######################################################################
+# Main
+######################################################################
+
+read_config
+setup
+
+########## parse options
+########## -c btfc.conf Batch run.
+########## -K           Kill all.
+########## -l -n name   Starts leeching name.
+########## -k -n name   Kill. Stops leeching name.
+########## -s -n name   Seed name.
+
+
+batch_run
