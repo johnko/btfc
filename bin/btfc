@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-095325
+SCRIPTVERSION=141204-172002
 
 ######################################################################
 # Variables
@@ -394,7 +394,7 @@ create_torrent_meta() {
     if [ -f "$2" ] ; then
       rsync  -lptgoDq "${2}" "${prefix_data}/${1}"
     elif [ -d "$2" ]; then
-      rsync -rlptgoDq "${2}/" "${prefix_data}/${1}/"
+      rsync -rlptgoDq --delete "${2}/" "${prefix_data}/${1}/"
     fi
   fi
   ########## Tracker is $tracker or dynamic
@@ -508,9 +508,7 @@ fetch_torrent_meta() {
     if ! diff -q "${prefix_meta}/${1}.torrent" "${prefix_tmp}/${1}.torrent" \
       >/dev/null 2>&1 ; then
       kill_bt_client "$1"
-      ########## rsync -t meta/$1.torrent to meta/bkp/$1.torr.`date +%y%m%d-%H%M%S`
       meta2bkp_torrent_meta "$1"
-      ########## rsync -t prefix_tmp/$1.torrent to prefix_meta/$1.torrent
       tmp2meta_torrent_meta "$1"
       [ -e "${prefix_tmp}/${1}.torrent" ] && rm "${prefix_tmp}/${1}.torrent"
     fi
