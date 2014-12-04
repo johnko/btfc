@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-182926
+SCRIPTVERSION=141204-183142
 
 ######################################################################
 # Variables
@@ -568,7 +568,9 @@ status_btfc() {
 # seeder related functions
 
 seed_btfc() {
-  create_torrent_meta "$1"  "$2"
+  if [ "$FORCE" = "1" ] || [ ! -e "${prefix_meta}/${1}.torrent" ]; then
+    create_torrent_meta "$1"  "$2"
+  fi
   start_bt_client     "$1"
 }
 
@@ -576,7 +578,9 @@ seed_btfc() {
 # leecher related functions
 
 leech_btfc() {
-  fetch_torrent_meta "$1"
+  if [ "$FORCE" = "1" ] || [ ! -e "${prefix_meta}/${1}.torrent" ]; then
+    fetch_torrent_meta "$1"
+  fi
   start_bt_client    "$1"
   while valid_process "${prefix_meta}/${1}.pid" ; do
     ########## Look for "Complete" or "Seeding" in log
