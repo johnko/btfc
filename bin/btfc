@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-172949
+SCRIPTVERSION=141204-174559
 
 ######################################################################
 # Variables
@@ -486,7 +486,7 @@ fetch_with() {
       --output="${prefix_tmp}/${3}.torrent" \
       --quiet \
       --timeout=10 \
-      "https://${2}/metafile/${3}.torrent"
+      "https://${2}:7878/metafile/${3}.torrent"
   elif [ "$1" = "wget" ]; then
     ########## TODO maybe more portable to Linux
     wget
