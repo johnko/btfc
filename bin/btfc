@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-174559
+SCRIPTVERSION=141204-174913
 
 ######################################################################
 # Variables
@@ -312,6 +312,7 @@ EOF
 
 generate_ssl() {
   ssldir="${NGINXCONF%/*}/ssl"
+  [ -d "${ssldir}" ] || install -d -m 755 "${ssldir}"
   umask 077
   if [ ! -e "${ssldir}/ssl.key" ]; then
     openssl genrsa -out "${ssldir}/ssl.key" 4096
