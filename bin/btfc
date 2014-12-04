@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-175618
+SCRIPTVERSION=141204-180156
 
 ######################################################################
 # Variables
@@ -91,7 +91,7 @@ read_config() {
   fi
   ########## if not set, set prefix_meta as /tmp/btfcmeta
   [ -z "$prefix_meta" ] && prefix_meta="/tmp/btfcmeta"
-  [ -d "$prefix_meta" ] || install -d -m 700 "$prefix_meta"
+  [ -d "$prefix_meta" ] || install -d -m 755 "$prefix_meta"
   if [ ! -d "$prefix_meta" ]; then
     echo "ERROR: $prefix_meta is not a valid folder."
     exiterror 1
