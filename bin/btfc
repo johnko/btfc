@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-183350
+SCRIPTVERSION=141204-183758
 
 ######################################################################
 # Variables
@@ -408,9 +408,10 @@ create_torrent_meta() {
   if [ -n "${tracker}" ]; then
     TRACKERURL="-t https://${tracker}/announce"
   else
-    for i in `ifconfig | egrep -o "([0-9]{1,3}\.){3}[0-9]{1,3}" | \
-      grep -v 127.0.0.1` ; do
-      TRACKERURL="-t https://${i}:`get_nginx_port`/announce"
+    for i in `ifconfig | sed 's/netmask.*//' | \
+        egrep -o "([0-9]{1,3}\.){3}[0-9]{1,3}" | \
+        grep -v 127.0.0.1` ; do
+      TRACKERURL="$TRACKERURL -t https://${i}:`get_nginx_port`/announce"
     done
   fi
   ########## create a new ${1}.torrent from path $1
