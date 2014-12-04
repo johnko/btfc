@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-080935
+SCRIPTVERSION=141204-094319
 
 ######################################################################
 # Variables
@@ -83,7 +83,7 @@ read_config() {
   ########## if exist config_file
   if [ -e "$config_file" ]; then
     echo -n "Sourcing $config_file ..." >&2
-    if ! source $config_file ; then
+    if ! . $config_file ; then
       echo "ERROR: can't source $config_file." >&2
       exiterror 1
     fi
