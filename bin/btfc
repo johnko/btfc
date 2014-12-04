@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-172002
+SCRIPTVERSION=141204-172523
 
 ######################################################################
 # Variables
@@ -545,8 +545,11 @@ setup_leech_btfc() {
 # status related functions
 
 status_btfc() {
-  if ls ${prefix_meta}/*.torrent >/dev/null 2>&1 ; then
-    for i in ${prefix_meta}/*.torrent ; do
+  #if ls ${prefix_meta}/*.torrent >/dev/null 2>&1 ; then
+  if pgrep -lf transmission-cli | grep '\-M \-er \-v' >/dev/null 2>&1 ; then
+    #for i in ${prefix_meta}/*.torrent ; do
+    for i in `pgrep -lf transmission-cli | grep '\-M \-er \-v' | \
+        awk '{print $NF}'` ; do
       transmission-show -s "$i" | \
         egrep -o '(Name.*|\.\.\..*)' | \
         awk '{$1=""; print}' | tr '\n' ' '
