@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-183142
+SCRIPTVERSION=141204-183350
 
 ######################################################################
 # Variables
@@ -105,9 +105,7 @@ read_config() {
     echo "ERROR: $prefix_data is not a valid folder."
     exiterror 1
   fi
-  ########## if not set, set opentracker_listen as 127.0.0.1:6969
   [ -z "$opentracker_listen" ] && opentracker_listen="127.0.0.1:6969"
-  ########## if not set, set opentracker_listen as *:7878
   [ -z "$nginx_listen" ] && nginx_listen="*:7878"
   ########## if not set peerlist, exit 1
   if [ -z "$peerlist" ]; then
@@ -412,7 +410,7 @@ create_torrent_meta() {
   else
     for i in `ifconfig | egrep -o "([0-9]{1,3}\.){3}[0-9]{1,3}" | \
       grep -v 127.0.0.1` ; do
-      TRACKERURL="-t https://${i}:7878/announce"
+      TRACKERURL="-t https://${i}:`get_nginx_port`/announce"
     done
   fi
   ########## create a new ${1}.torrent from path $1
@@ -485,7 +483,7 @@ fetch_with() {
       --output="${prefix_tmp}/${3}.torrent" \
       --quiet \
       --timeout=10 \
-      "https://${2}:7878/metafile/${3}.torrent"
+      "https://${2}:`get_nginx_port`/metafile/${3}.torrent"
   elif [ "$1" = "wget" ]; then
     ########## TODO maybe more portable to Linux
     wget
