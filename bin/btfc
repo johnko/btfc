@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-094319
+SCRIPTVERSION=141204-094752
 
 ######################################################################
 # Variables
@@ -124,7 +124,7 @@ read_config() {
     exiterror 1
   fi
   if [ ! -r "$synclist" ]; then
-    echo "ERROR: can't read from $peerlist."
+    echo "ERROR: can't read from $synclist."
     exiterror 1
   fi
 }
