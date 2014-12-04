@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-094752
+SCRIPTVERSION=141204-095110
 
 ######################################################################
 # Variables
@@ -549,17 +549,19 @@ setup_leech_btfc() {
 # status related functions
 
 status_btfc() {
-  for i in ${prefix_meta}/*.torrent ; do
-    transmission-show -s "$i" | \
-      egrep -o '(Name.*|\.\.\..*)' | \
-      awk '{$1=""; print}' | tr '\n' ' '
-    SIZE=`transmission-show "$i" | egrep '(Total Size:)' | \
-      awk -F: '{print $2}' | tr '\n' ' '`
-    HASH=`transmission-show "$i" | egrep '(Hash:)' | \
-      awk -F: '{print $2}' | tr '\n' ' '`
-    echo -n " $SIZE $HASH $i"
-    echo
-  done | grep -v 'no match' | column -t
+  if ls ${prefix_meta}/*.torrent ; then
+    for i in ${prefix_meta}/*.torrent ; do
+      transmission-show -s "$i" | \
+        egrep -o '(Name.*|\.\.\..*)' | \
+        awk '{$1=""; print}' | tr '\n' ' '
+      SIZE=`transmission-show "$i" | egrep '(Total Size:)' | \
+        awk -F: '{print $2}' | tr '\n' ' '`
+      HASH=`transmission-show "$i" | egrep '(Hash:)' | \
+        awk -F: '{print $2}' | tr '\n' ' '`
+      echo -n " $SIZE $HASH $i"
+      echo
+    done | grep -v 'no match' | column -t
+  fi
 }
 
 ######################################################################
