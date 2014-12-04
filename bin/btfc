@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-181352
+SCRIPTVERSION=141204-181818
 
 ######################################################################
 # Variables
@@ -260,7 +260,7 @@ install_nginx() {
 }
 
 link_metafile() {
-  ln -sf .. "${prefix_meta}/metafile"
+  ln -sf . "${prefix_meta}/metafile"
 }
 
 configure_nginx() {
