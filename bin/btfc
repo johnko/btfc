@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-182218
+SCRIPTVERSION=141204-182926
 
 ######################################################################
 # Variables
@@ -54,6 +54,7 @@ usage:  ${0##*/} [-c btfc.conf] [-l|-k|-s] [-n name] [-p /path]
 
         -l -n name   Starts leeching name.
         -l           Leech all.
+        -L           Force fetch.
 
         -k -n name   Kill. Stops leeching name.
         -k           Kill all.
@@ -61,6 +62,7 @@ usage:  ${0##*/} [-c btfc.conf] [-l|-k|-s] [-n name] [-p /path]
         -s -n name   Seed name.
         -s           Seed all.
         -s -n name -p /path  Seed name, first copying /path to prefix_data/name
+        -S           Force create new torrent.
 EOF
 }
 
@@ -352,7 +354,6 @@ kill_bt_client() {
       fi
     fi
     rm "${prefix_meta}/${1}.pid"
-    [ -e "${prefix_meta}/${1}.cksum" ] && rm "${prefix_meta}/${1}.cksum"
   fi
 }
 
@@ -418,25 +419,15 @@ create_torrent_meta() {
   ########## modified from \
   # http://edwardslab.bmcb.georgetown.edu/software/bittorrent_for_clusters.html
   if [ -f "${prefix_data}/${1}" ] ; then
-    CKSUM=`cksum ${prefix_data}/${1}`
-    OLDCKSUM=""
-    if [ -f "${prefix_meta}/${1}.cksum" ]; then
-      OLDCKSUM=`cat ${prefix_meta}/${1}.cksum`
-    fi
-    if [ "$CKSUM" != "$OLDCKSUM" ]; then
-      transmission-create -p $TRACKERURL \
-        -o "${prefix_meta}/${1}.torrent" "${prefix_data}/${1}"
-      chmod 644 "${prefix_meta}/${1}.torrent"
-      HASH=`transmission-show ${prefix_meta}/${1}.torrent | grep 'Hash: ' | awk '{print $2}'`
-      echo "$HASH" >>"${OPENTRACKERCONF%/*}/allowedhashes"
-      # SIGHUP opentracker to refresh allowedhashes
-      service opentracker onestatus >/dev/null || service opentracker onestart
-      [ -f /var/run/opentracker.pid ] && kill -1 `cat /var/run/opentracker.pid`
-      echo "$CKSUM" >"${prefix_meta}/${1}.cksum"
-      echo "Made torrent file for file $1." >&2
-    else
-      echo "File $1 torrent already made and file hasn't changed." >&2
-    fi
+    transmission-create -p $TRACKERURL \
+      -o "${prefix_meta}/${1}.torrent" "${prefix_data}/${1}"
+    chmod 644 "${prefix_meta}/${1}.torrent"
+    HASH=`transmission-show ${prefix_meta}/${1}.torrent | grep 'Hash: ' | awk '{print $2}'`
+    echo "$HASH" >>"${OPENTRACKERCONF%/*}/allowedhashes"
+    # SIGHUP opentracker to refresh allowedhashes
+    service opentracker onestatus >/dev/null || service opentracker onestart
+    [ -f /var/run/opentracker.pid ] && kill -1 `cat /var/run/opentracker.pid`
+    echo "Made torrent file for file $1." >&2
   elif [ -d "${prefix_data}/${1}" ] ; then
     transmission-create -p $TRACKERURL \
       -o "${prefix_meta}/${1}.torrent" "${prefix_data}/${1}"
@@ -623,14 +614,16 @@ batch_job() {
 # Main
 ######################################################################
 
-while getopts c:n:p:lksvh o; do
+while getopts c:n:p:lLksSvh o; do
   case "$o" in
     c) config_file="$OPTARG" ;;
     n) sync_name="${OPTARG}" ;;
     p) original_path="${OPTARG}" ;;
     l) LEECH=1 ;;
+    L) LEECH=1 ; FORCE=1 ;;
     k) KILL=1 ;;
     s) SEED=1 ;;
+    S) SEED=1 ; FORCE=1 ;;
     v) echo "$SCRIPTVERSION" ; exiterror 1 ;;
     h) usage ; exiterror 1 ;;
     [?]) usage ; exiterror 1 ;;
