@@ -554,7 +554,7 @@ status_btfc() {
         egrep -o '(Name.*|\.\.\..*)' | \
         awk '{$1=""; print}' | tr '\n' ' '`
       if echo "$STATS" | grep error >/dev/null 2>&1 ; then
-        STATS="tracker error"
+        STATS="err err"
       fi
       SIZE=`transmission-show "$i" | egrep '(Total Size:)' | \
         awk -F: '{print $2}' | tr '\n' ' '`
