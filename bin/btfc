@@ -570,12 +570,21 @@ status_btfc() {
 }
 
 ######################################################################
+# prune related
+
+prune_data() {
+  ########## TODO
+}
+
+######################################################################
 # seeder related functions
 
 seed_btfc() {
   if [ "$FORCE" = "1" ] || [ ! -e "${prefix_meta}/${1}.torrent" ]; then
     create_torrent_meta "$1"  "$2"
   fi
+  ########## may not want to prune if seeding
+  #prune_data          "$1"
   start_bt_client     "$1"
 }
 
@@ -586,6 +595,7 @@ leech_btfc() {
   if [ "$FORCE" = "1" ] || [ ! -e "${prefix_meta}/${1}.torrent" ]; then
     fetch_torrent_meta "$1"
   fi
+  prune_data         "$1"
   start_bt_client    "$1"
   while valid_process "${prefix_meta}/${1}.pid" ; do
     ########## Look for "Complete" or "Seeding" in log
