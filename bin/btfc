@@ -31,7 +31,7 @@
 ######################################################################
 # Script version is YYmmdd-HHMM in UTC, date +%y%m%d-%H%M%S
 ######################################################################
-SCRIPTVERSION=141204-183758
+SCRIPTVERSION=141205-064217
 
 ######################################################################
 # Variables
@@ -312,7 +312,6 @@ server {
 }
 EOF
   chmod 644 "${sitesdir}/ssl-opentracker"
-  link_metafile
 }
 
 generate_ssl() {
@@ -492,6 +491,7 @@ fetch_with() {
 }
 
 fetch_torrent_meta() {
+  kill_bt_client "${1}"
   ########## copies it to prefix_tmp so we can do fetch timestamping
   meta2tmp_torrent_meta "$1"
   ########## for each peer
@@ -505,13 +505,11 @@ fetch_torrent_meta() {
     ########## if different from prefix_meta/$1.torrent, run kill_bt_client $1
     if ! diff -q "${prefix_meta}/${1}.torrent" "${prefix_tmp}/${1}.torrent" \
       >/dev/null 2>&1 ; then
-      kill_bt_client "$1"
       meta2bkp_torrent_meta "$1"
       tmp2meta_torrent_meta "$1"
       [ -e "${prefix_tmp}/${1}.torrent" ] && rm "${prefix_tmp}/${1}.torrent"
     fi
   elif [ -e "${prefix_tmp}/${1}.torrent" ]; then
-    kill_bt_client "$1"
     tmp2meta_torrent_meta "$1"
     [ -e "${prefix_tmp}/${1}.torrent" ] && rm "${prefix_tmp}/${1}.torrent"
   fi
@@ -528,6 +526,7 @@ setup_seed_btfc() {
   install_nginx
   configure_nginx
   generate_ssl
+  link_metafile
   service nginx onestart >/dev/null 2>&1
 }
 
