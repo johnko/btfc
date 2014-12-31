@@ -262,7 +262,12 @@ link_metafile() {
 }
 
 configure_nginx() {
-  cat >"${NGINXCONF}" <<EOF
+  sitesavail="${NGINXCONF%/*}/sites-available"
+  sitesdir="${NGINXCONF%/*}/sites-enabled"
+  if which nginx-config-sites-enabled >/dev/null 2>&1 ; then
+    nginx-config-sites-enabled
+  else
+    cat >"${NGINXCONF}" <<EOF
 # nginx config file
 user nobody;
 worker_processes 1;
@@ -278,15 +283,14 @@ http {
   include /usr/local/etc/nginx/sites-enabled/*;
 }
 EOF
-  chmod 644 "${NGINXCONF}"
-  #
-  sitesavail="${NGINXCONF%/*}/sites-available"
-  install -d -m 755 "${sitesavail}"
-  chmod 755 "${sitesavail}"
-  #
-  sitesdir="${NGINXCONF%/*}/sites-enabled"
-  install -d -m 755 "${sitesdir}"
-  chmod 755 "${sitesdir}"
+    chmod 644 "${NGINXCONF}"
+    #
+    install -d -m 755 "${sitesavail}"
+    chmod 755 "${sitesavail}"
+    #
+    install -d -m 755 "${sitesdir}"
+    chmod 755 "${sitesdir}"
+  fi
   cat >"${sitesdir}/ssl-opentracker" <<EOF
 upstream opentracker {
   server ${opentracker_listen};
