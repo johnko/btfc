@@ -26,10 +26,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-######################################################################
-# Script version is yymmdd-HHMMSS in UTC, date +%y%m%d-%H%M%S
-######################################################################
-SCRIPTVERSION=141231-021245
 
 ######################################################################
 # Variables
@@ -266,6 +262,7 @@ configure_nginx() {
   sitesdir="${NGINXCONF%/*}/sites-enabled"
   if which nginx-config-sites-enabled >/dev/null 2>&1 ; then
     nginx-config-sites-enabled
+    nginx-openssl-generate
   else
     cat >"${NGINXCONF}" <<EOF
 # nginx config file
